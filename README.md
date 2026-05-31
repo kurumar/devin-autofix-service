@@ -30,9 +30,6 @@ An event-driven automation that turns labeled GitHub issues into Devin sessions 
         v                    v
   comment "Done"      comment "Needs input"
   on the issue        
-
-
-  GET /status returns all current tasks with their status: active / completed / failed / blocked  +  total ACUs
 ```
 
 1. You create a GitHub issue
