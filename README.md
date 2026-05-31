@@ -1,6 +1,6 @@
 # devin-autofix-service
 
-An event-driven automation that turns labeled GitHub issues into Devin sessions producing pull requests automatically. When you add the `devin-autofix` label to any issue in the targeted repo, this service creates a Devin session to fix it and open a PR.
+An event-driven automation that turns labeled GitHub issues into [Devin](https://devin.ai/) sessions producing pull requests autonomously. When you add the `devin-autofix` label to any issue in the targeted repo, this service creates a Devin session to fix it and open a PR.
 
 ## How It Works
 
