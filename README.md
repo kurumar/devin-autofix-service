@@ -29,7 +29,7 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
         |                    |
         v                    +- waiting_for_user -> comment "Needs input"
   comment "Done"             |
-                             +- errored / suspended ---> comment "Error"
+                             +- errored / suspended -> comment "Error"
                                  
 ```
 
