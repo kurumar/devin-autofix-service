@@ -25,12 +25,12 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 
         has a PR?
          /        \
-       yes          no — check Devin session status
+       yes          no, check Devin session status
         |                    |
-        v                    +-- waiting_for_user ----------> comment "Needs input"
+        v                    +- waiting_for_user -> comment "Needs input"
   comment "Done"             |
-  on the issue               +-- errored / suspended, or ---> comment "Error",
-                                 ended without opening a PR   mark task failed
+                             +- errored / suspended ---> comment "Error"
+                                 
 ```
 
 1. You create a GitHub issue
@@ -46,9 +46,9 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 ```
 .
 ├── app.py                # GitHub + Devin AI automation
-├── test_app.py           # Test suite (pytest)
-├── AGENTS.md             # Instructions for AI coding agents
 ├── .env.example          # Template for credentials
+├── test_app.py           
+├── AGENTS.md             
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── Dockerfile
