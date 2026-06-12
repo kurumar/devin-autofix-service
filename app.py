@@ -6,6 +6,7 @@ import sqlite3
 import threading
 import time
 from collections import Counter
+from contextlib import closing
 from datetime import datetime, timezone
 
 import requests
@@ -58,8 +59,7 @@ def connect() -> sqlite3.Connection:
 
 def init_db() -> None:
     os.makedirs(os.path.dirname(DB_FILE) or ".", exist_ok=True)
-    conn = connect()
-    try:
+    with closing(connect()) as conn, conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(
             """
@@ -80,39 +80,16 @@ def init_db() -> None:
             )
             """
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def query_all(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-    conn = connect()
-    try:
+    with closing(connect()) as conn:
         return conn.execute(sql, params).fetchall()
-    finally:
-        conn.close()
-
-
-def query_one(sql: str, params: tuple = ()) -> sqlite3.Row | None:
-    conn = connect()
-    try:
-        return conn.execute(sql, params).fetchone()
-    finally:
-        conn.close()
 
 
 def execute(sql: str, params: tuple = ()) -> int:
-    conn = connect()
-    try:
-        cur = conn.execute(sql, params)
-        conn.commit()
-        return cur.rowcount
-    finally:
-        conn.close()
-
-
-def find_task(issue_number: int) -> sqlite3.Row | None:
-    return query_one("SELECT * FROM tasks WHERE issue_number = ?", (issue_number,))
+    with closing(connect()) as conn, conn:  # `conn` as ctx mgr = commit/rollback
+        return conn.execute(sql, params).rowcount
 
 
 def now_iso() -> str:
@@ -166,15 +143,15 @@ def post_issue_comment(repo: str, issue_number: int, body: str) -> None:
 
 # Devin API helpers
 
-def devin_auth_headers() -> dict:
-    return {"Authorization": f"Bearer {DEVIN_API_KEY}", "Content-Type": "application/json"}
+DEVIN_HEADERS = {"Authorization": f"Bearer {DEVIN_API_KEY}", "Content-Type": "application/json"}
+MAX_ACU_LIMIT = int(os.environ.get("MAX_ACU_LIMIT", "10"))
 
 
-def create_devin_session(prompt: str, tags: list[str], max_acu_limit: int = 10) -> dict:
+def create_devin_session(prompt: str, tags: list[str]) -> dict:
     resp = requests.post(
         f"{DEVIN_API}/sessions",
-        headers=devin_auth_headers(),
-        json={"prompt": prompt, "tags": tags, "max_acu_limit": max_acu_limit},
+        headers=DEVIN_HEADERS,
+        json={"prompt": prompt, "tags": tags, "max_acu_limit": MAX_ACU_LIMIT},
         timeout=30,
     )
     resp.raise_for_status()
@@ -182,7 +159,7 @@ def create_devin_session(prompt: str, tags: list[str], max_acu_limit: int = 10) 
 
 
 def get_devin_session(session_id: str) -> dict:
-    resp = requests.get(f"{DEVIN_API}/sessions/{session_id}", headers=devin_auth_headers(), timeout=15)
+    resp = requests.get(f"{DEVIN_API}/sessions/{session_id}", headers=DEVIN_HEADERS, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
@@ -244,10 +221,8 @@ def classify_session(session: dict, has_pr: bool) -> tuple[str, str | None]:
     detail = session.get("status_detail")
     if has_pr:
         return "completed", None
-    if status == "error":
-        return "failed", detail or "error"
-    if status == "suspended":
-        return "failed", detail or "suspended"
+    if status in ("error", "suspended"):
+        return "failed", detail or status
     if detail == "waiting_for_user":
         return "blocked", "Devin is waiting for input and hasn't opened a PR yet"
     if status == "exit" or detail == "finished":
@@ -332,11 +307,8 @@ def webhook():
         log.warning("Webhook signature verification failed")
         return jsonify({"error": "forbidden"}), 403
 
-    if request.headers.get("X-GitHub-Event") != "issues":
-        return jsonify({"status": "ignored"})
-
     payload = request.get_json(silent=True) or {}
-    if payload.get("action") != "labeled":
+    if request.headers.get("X-GitHub-Event") != "issues" or payload.get("action") != "labeled":
         return jsonify({"status": "ignored"})
 
     issue_number = payload.get("issue", {}).get("number", "?")
@@ -352,10 +324,9 @@ def webhook():
 
 @app.route("/status")
 def status():
-    if STATUS_TOKEN:
-        token = request.args.get("token") or request.headers.get("Authorization", "").removeprefix("Bearer ")
-        if not hmac.compare_digest(token, STATUS_TOKEN):
-            return jsonify({"error": "unauthorized"}), 401
+    token = request.args.get("token") or request.headers.get("Authorization", "").removeprefix("Bearer ")
+    if not STATUS_TOKEN or not hmac.compare_digest(token.encode(), STATUS_TOKEN.encode()):
+        return jsonify({"error": "unauthorized"}), 401
     return jsonify(build_status_report())
 
 
