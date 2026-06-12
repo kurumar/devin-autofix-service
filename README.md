@@ -25,11 +25,12 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 
         has a PR?
          /        \
-       yes          no, and Devin session status is waiting_for_user
+       yes          no — check Devin session status
         |                    |
-        v                    v
-  comment "Done"      comment "Needs input"
-  on the issue        
+        v                    +-- waiting_for_user ----------> comment "Needs input"
+  comment "Done"             |
+  on the issue               +-- errored / suspended, or ---> comment "Error",
+                                 ended without opening a PR   mark task failed
 ```
 
 1. You create a GitHub issue
@@ -44,12 +45,22 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 
 ```
 .
-├── app.py              # GitHub + Devin AI automation
-├── .env.example        # Template for credentials
+├── app.py                # GitHub + Devin AI automation
+├── test_app.py           # Test suite (pytest)
+├── AGENTS.md             # Instructions for AI coding agents
+├── .env.example          # Template for credentials
 ├── requirements.txt
+├── requirements-dev.txt
 ├── Dockerfile
 ├── docker-compose.yml
 └── README.md
+```
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+pytest
 ```
 
 ## API Endpoints
@@ -57,7 +68,7 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/webhook` | POST | Receives GitHub webhook events (issue labeled) |
-| `/status` | GET | Returns all tasks as JSON (requires token) |
+| `/status` | GET | Returns all tasks as JSON (requires `Authorization: Bearer` token) |
 | `/health` | GET | Health check |
 
 ## Quick Start
@@ -128,6 +139,17 @@ In your target repository:
    ```
 4. **Check status:**
    ```bash
-   http://YOUR_SERVER_IP:5000/status?token=YOUR_STATUS_TOKEN
+   curl -H "Authorization: Bearer YOUR_STATUS_TOKEN" http://YOUR_SERVER_IP:5000/status
    ```
 5. **Watch the GitHub issue** — Devin posts a comment when it starts and when it finishes
+
+## Production Notes
+
+- **HTTPS**: deliver webhooks over TLS. Put a reverse proxy with automatic
+  certificates (e.g. [Caddy](https://caddyserver.com/)) in front of port 5000
+  and use `https://your-domain/webhook` as the payload URL.
+- The service exits at startup if any required env var is missing.
+- Tasks with no PR after `MAX_TASK_AGE` seconds (default 86400 = 24h) are
+  marked failed and polling stops.
+- Task state lives in the `data` Docker volume (`tasks.db`) — back it up if
+  task history matters to you.
