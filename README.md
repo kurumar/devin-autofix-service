@@ -25,11 +25,12 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 
         has a PR?
          /        \
-       yes          no, and Devin session status is waiting_for_user
+       yes          no, check Devin session status
         |                    |
-        v                    v
-  comment "Done"      comment "Needs input"
-  on the issue        
+        v                    +- waiting_for_user -> comment "Needs input"
+  comment "Done"             |
+                             +- errored / suspended ---> comment "Error"
+                                 
 ```
 
 1. You create a GitHub issue
@@ -44,9 +45,12 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 
 ```
 .
-├── app.py              # GitHub + Devin AI automation
-├── .env.example        # Template for credentials
+├── app.py                # GitHub + Devin AI automation
+├── .env.example          # Template for credentials
+├── test_app.py           
+├── AGENTS.md             
 ├── requirements.txt
+├── requirements-dev.txt
 ├── Dockerfile
 ├── docker-compose.yml
 └── README.md
@@ -57,7 +61,7 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/webhook` | POST | Receives GitHub webhook events (issue labeled) |
-| `/status` | GET | Returns all tasks as JSON (requires token) |
+| `/status` | GET | Returns all tasks as JSON (requires `Authorization: Bearer` token) |
 | `/health` | GET | Health check |
 
 ## Quick Start
@@ -128,6 +132,6 @@ In your target repository:
    ```
 4. **Check status:**
    ```bash
-   http://YOUR_SERVER_IP:5000/status?token=YOUR_STATUS_TOKEN
+   curl -H "Authorization: Bearer YOUR_STATUS_TOKEN" http://YOUR_SERVER_IP:5000/status
    ```
 5. **Watch the GitHub issue** — Devin posts a comment when it starts and when it finishes

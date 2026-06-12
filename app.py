@@ -20,6 +20,7 @@ DEVIN_API = f"https://api.devin.ai/v3/organizations/{DEVIN_ORG_ID}"
 STATUS_TOKEN = os.environ.get("STATUS_TOKEN", "")
 DB_FILE = os.environ.get("DB_FILE", "data/tasks.db")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "30"))
+MAX_TASK_AGE = int(os.environ.get("MAX_TASK_AGE", "86400"))
 
 PROMPT_TEMPLATE = """\
 You are an autonomous engineering agent working on the repository: {repo_url}.
@@ -283,19 +284,28 @@ def update_task_from_session(row: sqlite3.Row, session: dict) -> None:
         )
 
 
+def poll_once() -> None:
+    rows = query_all(
+        "SELECT * FROM tasks WHERE status NOT IN ('completed', 'failed') "
+        "AND devin_session_id IS NOT NULL"
+    )
+    for row in rows:
+        if elapsed_seconds(row["created_at"]) > MAX_TASK_AGE:
+            finish_task(row, "failed",
+                        error=f"timed out after {MAX_TASK_AGE}s without a pull request",
+                        acus=row["acus_consumed"] or 0)
+            continue
+        try:
+            session = get_devin_session(row["devin_session_id"])
+            update_task_from_session(row, session)
+        except Exception as exc:
+            log.error("  Error polling %s: %s", row["devin_session_id"], exc)
+
+
 def poll_active_sessions() -> None:
     while True:
         time.sleep(POLL_INTERVAL)
-        rows = query_all(
-            "SELECT * FROM tasks WHERE status NOT IN ('completed', 'failed') "
-            "AND devin_session_id IS NOT NULL"
-        )
-        for row in rows:
-            try:
-                session = get_devin_session(row["devin_session_id"])
-                update_task_from_session(row, session)
-            except Exception as exc:
-                log.error("  Error polling %s: %s", row["devin_session_id"], exc)
+        poll_once()
 
 
 app = Flask(__name__)
@@ -324,7 +334,8 @@ def webhook():
 
 @app.route("/status")
 def status():
-    token = request.args.get("token") or request.headers.get("Authorization", "").removeprefix("Bearer ")
+    # Header only: a query-param token would leak into proxy and access logs.
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ")
     if not STATUS_TOKEN or not hmac.compare_digest(token.encode(), STATUS_TOKEN.encode()):
         return jsonify({"error": "unauthorized"}), 401
     return jsonify(build_status_report())
@@ -345,7 +356,8 @@ def check_env() -> None:
     }
     missing = [name for name, value in required.items() if not value]
     if missing:
-        log.warning("Missing env vars: %s", ", ".join(missing))
+        log.error("Missing required env vars: %s", ", ".join(missing))
+        raise SystemExit(1)
 
 
 check_env()
