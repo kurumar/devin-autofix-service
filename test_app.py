@@ -86,8 +86,6 @@ def post_webhook(client, payload, event="issues", signature=None):
     )
 
 
-# Webhook signature verification
-
 def test_signature_valid():
     body = b'{"a": 1}'
     assert app.verify_webhook_signature(body, sign(body))
@@ -97,8 +95,6 @@ def test_signature_tampered_or_missing():
     assert not app.verify_webhook_signature(b"tampered", sign(b'{"a": 1}'))
     assert not app.verify_webhook_signature(b'{"a": 1}', "")
 
-
-# Session lifecycle classification
 
 @pytest.mark.parametrize(
     ("session", "has_pr", "expected"),
@@ -115,8 +111,6 @@ def test_classify_session(session, has_pr, expected):
     lifecycle, _ = app.classify_session(session, has_pr=has_pr)
     assert lifecycle == expected
 
-
-# /health and /status
 
 def test_health(client):
     resp = client.get("/health")
@@ -139,8 +133,6 @@ def test_status_with_token(client):
     assert report["tasks"] == []
 
 
-# /webhook
-
 def test_webhook_rejects_bad_signature(client):
     assert post_webhook(client, issue_payload(), signature="sha256=bad").status_code == 403
 
@@ -159,7 +151,7 @@ def test_webhook_creates_session(client, fake_devin, comments):
     assert fake_devin[0]["tags"] == ["devin-autofix", "issue-7"]
     (task,) = app.query_all("SELECT * FROM tasks")
     assert (task["issue_number"], task["status"], task["devin_session_id"]) == (7, "running", "devin-123")
-    assert len(comments) == 1  # "Devin is working on this" posted to the issue
+    assert len(comments) == 1
 
 
 def test_webhook_skips_duplicate_issue(client, fake_devin):
@@ -177,8 +169,6 @@ def test_webhook_devin_failure_rolls_back_task(client, monkeypatch):
     assert resp.status_code == 500
     assert app.query_all("SELECT * FROM tasks") == []  # row gone, redelivery can retry
 
-
-# Polling state transitions
 
 def test_session_with_pr_completes_task(client, fake_devin):
     post_webhook(client, issue_payload(number=7))
