@@ -56,13 +56,6 @@ An event-driven automation that turns labeled GitHub issues into [Devin](https:/
 └── README.md
 ```
 
-## Development
-
-```bash
-pip install -r requirements-dev.txt
-pytest
-```
-
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -142,14 +135,3 @@ In your target repository:
    curl -H "Authorization: Bearer YOUR_STATUS_TOKEN" http://YOUR_SERVER_IP:5000/status
    ```
 5. **Watch the GitHub issue** — Devin posts a comment when it starts and when it finishes
-
-## Production Notes
-
-- **HTTPS**: deliver webhooks over TLS. Put a reverse proxy with automatic
-  certificates (e.g. [Caddy](https://caddyserver.com/)) in front of port 5000
-  and use `https://your-domain/webhook` as the payload URL.
-- The service exits at startup if any required env var is missing.
-- Tasks with no PR after `MAX_TASK_AGE` seconds (default 86400 = 24h) are
-  marked failed and polling stops.
-- Task state lives in the `data` Docker volume (`tasks.db`) — back it up if
-  task history matters to you.
